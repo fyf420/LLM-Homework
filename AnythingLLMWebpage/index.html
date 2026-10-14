@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AnythingLLM · 文件上传</title>
+<style>
+  :root {
+    --brand: #4f7cff;
+    --brand-2: #7b5cff;
+    --ok: #16a34a;
+    --err: #dc2626;
+    --ink: #1e2330;
+    --muted: #6b7280;
+    --line: #e6e8ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(1200px 600px at 10% -10%, #e8edff 0%, transparent 60%),
+                radial-gradient(900px 500px at 110% 10%, #efe8ff 0%, transparent 55%),
+                #f6f7fb;
+  }
+  .card {
+    width: 100%;
+    max-width: 520px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    box-shadow: 0 20px 50px rgba(30, 35, 48, .10);
+    padding: 32px;
+  }
+  .title { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    display: grid; place-items: center; color: #fff; font-size: 22px;
+    box-shadow: 0 6px 16px rgba(79, 124, 255, .35);
+  }
+  h1 { font-size: 19px; margin: 0; font-weight: 650; }
+  .sub { margin: 0 0 24px; color: var(--muted); font-size: 13px; }
+  .sub b { color: var(--brand); font-weight: 600; }
+
+  .drop {
+    border: 2px dashed #cfd6e6;
+    border-radius: 16px;
+    padding: 34px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s, transform .1s;
+    background: #fbfcff;
+  }
+  .drop:hover { border-color: var(--brand); background: #f4f7ff; }
+  .drop.drag { border-color: var(--brand); background: #eef3ff; transform: scale(1.01); }
+  .drop .icon { font-size: 34px; line-height: 1; }
+  .drop .main { margin-top: 12px; font-weight: 600; font-size: 15px; }
+  .drop .hint { margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+  .drop.has-file { border-style: solid; border-color: var(--brand); background: #f4f7ff; }
+  .filemeta { margin-top: 10px; font-size: 13px; color: var(--ink); word-break: break-all; }
+  .filemeta span { color: var(--muted); }
+
+  button.upload {
+    margin-top: 20px;
+    width: 100%;
+    padding: 14px;
+    border: 0;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 650;
+    color: #fff;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    box-shadow: 0 10px 22px rgba(79, 124, 255, .32);
+    transition: opacity .2s, transform .1s;
+  }
+  button.upload:hover:not(:disabled) { transform: translateY(-1px); }
+  button.upload:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+  .steps { margin-top: 20px; display: grid; gap: 8px; }
+  .step {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--muted);
+  }
+  .dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid #d3d8e6; flex: 0 0 auto;
+    display: grid; place-items: center; font-size: 10px; color: #fff;
+  }
+  .step.active { color: var(--ink); font-weight: 600; }
+  .step.active .dot { border-color: var(--brand); border-right-color: transparent; animation: spin .7s linear infinite; }
+  .step.done { color: var(--ok); }
+  .step.done .dot { background: var(--ok); border-color: var(--ok); }
+  .step.fail { color: var(--err); }
+  .step.fail .dot { background: var(--err); border-color: var(--err); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .msg {
+    margin-top: 18px; padding: 12px 14px; border-radius: 12px;
+    font-size: 13.5px; line-height: 1.5; display: none; word-break: break-all;
+  }
+  .msg.show { display: block; }
+  .msg.ok { background: #eafaf0; color: #14612f; border: 1px solid #bdeccd; }
+  .msg.err { background: #fdeeee; color: #8a1c1c; border: 1px solid #f3caca; }
+  .faint { color: var(--muted); font-size: 11.5px; margin-top: 18px; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">
+      <div class="logo">&#8682;</div>
+      <h1>AnythingLLM 文件上传</h1>
+    </div>
+    <p class="sub">上传文件并自动嵌入到工作区 <b id="wsName">…</b></p>
+
+    <div class="drop" id="drop">
+      <div class="icon">&#128193;</div>
+      <div class="main">点击选择文件，或拖拽到此处</div>
+      <div class="hint">支持 PDF / TXT / DOCX / MD / CSV 等</div>
+      <div class="filemeta" id="filemeta" style="display:none"></div>
+    </div>
+    <input type="file" id="file" style="display:none">
+
+    <button class="upload" id="btn" disabled>开始上传并嵌入</button>
+
+    <div class="steps">
+      <div class="step" id="s1"><span class="dot"></span>获取第一个工作区</div>
+      <div class="step" id="s2"><span class="dot"></span>上传文件</div>
+      <div class="step" id="s3"><span class="dot"></span>嵌入到工作区</div>
+    </div>
+
+    <div class="msg" id="msg"></div>
+    <div class="faint">仅在本地运行 · 直连 http://127.0.0.1:3001</div>
+  </div>
+
+<script>
+  const BASE = "http://127.0.0.1:3001/api/v1";
+  const API_KEY = "Y8WWKJY-KZ74SHG-QQ8YAYW-R7ARDAM";
+  const HEADERS = { Authorization: "Bearer " + API_KEY };
+
+  const $ = id => document.getElementById(id);
+  const drop = $("drop"), fileInput = $("file"), btn = $("btn");
+  const filemeta = $("filemeta"), msg = $("msg"), wsName = $("wsName");
+  let chosen = null;
+
+  function setStep(n, state, text) {
+    const el = $("s" + n);
+    el.className = "step" + (state ? " " + state : "");
+    el.querySelector(".dot").textContent = state === "done" ? "✓" : state === "fail" ? "!" : "";
+    if (text) el.lastChild.textContent = text;
+  }
+  function resetSteps() {
+    ["获取第一个工作区", "上传文件", "嵌入到工作区"].forEach((t, i) => {
+      const el = $("s" + (i + 1));
+      el.className = "step";
+      el.querySelector(".dot").textContent = "";
+      el.lastChild.textContent = t;
+    });
+  }
+  function showMsg(text, ok) {
+    msg.className = "msg show " + (ok ? "ok" : "err");
+    msg.textContent = text;
+  }
+  const human = n => n < 1024 ? n + " B" : n < 1048576 ? (n/1024).toFixed(1) + " KB" : (n/1048576).toFixed(1) + " MB";
+
+  function pick(file) {
+    if (!file) return;
+    chosen = file;
+    drop.classList.add("has-file");
+    filemeta.style.display = "block";
+    filemeta.innerHTML = "&#128196; <b>" + file.name + "</b><br><span>" + human(file.size) + "</span>";
+    btn.disabled = false;
+    msg.className = "msg";
+    resetSteps();
+  }
+
+  drop.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", e => pick(e.target.files[0]));
+  ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add("drag");
+  }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove("drag");
+  }));
+  drop.addEventListener("drop", e => pick(e.dataTransfer.files[0]));
+
+  async function api(path, options) {
+    const res = await fetch(BASE + path, options);
+    if (res.status === 403) throw new Error("API Key 无效（403）");
+    if (!res.ok) throw new Error("请求失败：HTTP " + res.status);
+    return res.json();
+  }
+
+  function firstWorkspace(data) {
+    const list = Array.isArray(data.workspaces) ? data.workspaces : [];
+    return list[0] || null;
+  }
+
+  btn.addEventListener("click", async () => {
+    if (!chosen) return;
+    btn.disabled = true;
+    resetSteps();
+    msg.className = "msg";
+    try {
+      // 1. 第一个工作区
+      setStep(1, "active");
+      const ws = firstWorkspace(await api("/workspaces", { headers: HEADERS }));
+      if (!ws) throw new Error("没有可用的工作区，请先在 AnythingLLM 中创建一个。");
+      const slug = ws.slug;
+      wsName.textContent = ws.name + " (" + slug + ")";
+      setStep(1, "done");
+
+      // 2. 上传文件（addToWorkspaces 会自动完成嵌入）
+      setStep(2, "active");
+      const form = new FormData();
+      form.append("file", chosen);
+      form.append("addToWorkspaces", slug);
+      const up = await api("/document/upload", { method: "POST", headers: HEADERS, body: form });
+      const doc = (up.documents || [])[0];
+      if (!up.success || !doc) throw new Error(up.error || "上传失败");
+      setStep(2, "done");
+
+      // 3. 校验已嵌入工作区
+      setStep(3, "active");
+      const embedded = await verify(slug, doc.location);
+      if (!embedded) throw new Error("上传成功，但未在工作区中确认到该文档（嵌入可能稍后完成）。");
+      setStep(3, "done");
+      showMsg("✔ 上传并嵌入成功！\n工作区：" + ws.name + " (" + slug + ")\n文档：" + doc.title, true);
+    } catch (err) {
+      const active = [1, 2, 3].find(n => $("s" + n).classList.contains("active"));
+      if (active) setStep(active, "fail");
+      showMsg("✘ " + err.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function verify(slug, location) {
+    const target = (location || "").replace(/^\/+/, "");
+    for (let i = 0; i < 6; i++) {
+      try {
+        const data = await api("/workspace/" + encodeURIComponent(slug), { headers: HEADERS });
+        let ws = data.workspace;
+        if (Array.isArray(ws)) ws = ws[0];
+        const docs = (ws && ws.documents) || [];
+        if (docs.some(d => (d.docpath || "").replace(/^\/+/, "") === target)) return true;
+      } catch (_) { /* 重试 */ }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    return false;
+  }
+
+  // 载入时展示当前工作区名
+  api("/workspaces", { headers: HEADERS })
+    .then(d => { const w = firstWorkspace(d); if (w) wsName.textContent = w.name + " (" + w.slug + ")"; })
+    .catch(() => { wsName.textContent = "（无法连接 AnythingLLM）"; });
+</script>
+</body>
+</html>
